@@ -6,14 +6,15 @@ module TextStatistics (
     mostCommonLetter
 ) where
 
-import Statistics
+import Prelude hiding (filter)
+import qualified Statistics as S
 import Control.Applicative ((<$>), (<*>))
-import Data.HashMap.Strict
+import qualified Data.HashMap.Strict as HM
 import Data.Char
 
--- Statistics on Char type
+-- Statistics on Char stream
 
-type TextStatistics a = Statistics Char a
+type TextStatistics a = S.Statistics Char a
 
 -- predicates
 
@@ -25,41 +26,38 @@ isNewLine c = c == '\n'
 
 -- word count
 
-data WordCountState = WordCountState Int Bool
-
-wordCount' :: TextStatistics WordCountState
-wordCount' = fold f (WordCountState 0 False)
-    where
-        f (WordCountState n isInWord) c = WordCountState (if not isInWord && isWordChar c then n + 1 else n) (isWordChar c)
+data WordCountState = WordCountState {
+    charCount :: Int,
+    isInWord :: Bool
+}
 
 wordCount :: TextStatistics Int
-wordCount = f <$> wordCount'
+wordCount = charCount <$> S.fold f (WordCountState 0 False)
     where
-        f (WordCountState n _) = n
+        f w c = WordCountState (if not (isInWord w) && isWordChar c then (charCount w) + 1 else (charCount w)) (isWordChar c)
 
 -- line count. Assuming empty file has 1 line of 0 length
 
 lineCount :: TextStatistics Int
-lineCount = count isNewLine 1
+lineCount = S.count isNewLine 1
 
 -- average word length
 
 wordCharCount :: TextStatistics Int
-wordCharCount = count isWordChar 0
+wordCharCount = S.count isWordChar 0
 
-averageWordLength :: TextStatistics Float
-averageWordLength = (/) <$> (fmap fromIntegral wordCharCount) <*> (fmap fromIntegral wordCount)
+averageWordLength :: TextStatistics (Maybe Float)
+averageWordLength = maybeDivide <$> wordCharCount <*> wordCount
+    where
+        maybeDivide a b = if b /= 0 then Just (fromIntegral a / fromIntegral b) else Nothing
 
 -- most common character (if any) with number of usages
 
-lettersMap :: TextStatistics (HashMap Char Int)
-lettersMap = fold (\hm c -> if member c hm then insertWith (+) c 1 hm else insert c 1 hm) empty
-
-maxChar :: Maybe (Char, Int) -> Char -> Int -> Maybe (Char, Int)
-maxChar Nothing c n = Just (c, n)
-maxChar (Just (c0, n0)) c n = if n > n0 then Just (c, n) else Just (c0, n0)
-
-mostCommonLetter :: TextStatistics (Maybe (Char, Int))
-mostCommonLetter = f <$> lettersMap
+mostCommonLetter :: TextStatistics (Maybe Char)
+mostCommonLetter = fmap fst <$> ((HM.foldlWithKey' maxChar Nothing) <$> lettersMap)
     where
-        f = foldlWithKey' maxChar Nothing
+        lettersMap :: TextStatistics (HM.HashMap Char Int)
+        lettersMap = S.filter isWordChar $ S.fold (\hm c -> if HM.member c hm then HM.insertWith (+) c 1 hm else HM.insert c 1 hm) HM.empty
+        maxChar Nothing c n = Just (c, n)
+        maxChar (Just (c0, n0)) c n = if n > n0 then Just (c, n) else Just (c0, n0)
+

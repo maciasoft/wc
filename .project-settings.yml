@@ -9,7 +9,8 @@ environment: ghc-7.8-stable-14.09
 auto-hidden: []
 cabal-file: project.cabal
 version: 1
-extra-packages: quickcheck-properties-0.1
+extra-packages: ''
 ghc-args:
 - -Wall
+- -XNoImplicitPrelude
 excluded-modules: []
